@@ -7,13 +7,18 @@ use super::{ConstraintSystem, LinearCombination, Variable};
 use crate::errors::R1CSError;
 use crate::publickey::PublicKey;
 
+/**
+ * R1CS Prover which contains witness and
+ * constraints system  
+ */
 pub struct R1CSProver {
-    pub constraints: Vec<LinearCombination>,
-    pub a_L: Vec<Scalar>,
-    pub a_R: Vec<Scalar>,
-    pub a_O: Vec<Scalar>,
-    pub v_vec: Vec<Scalar>,
-    pub gamma_vec: Vec<Scalar>,
+    pub(super) constraints: Vec<LinearCombination>,
+    pub(super) a_L: Vec<Scalar>,
+    pub(super) a_R: Vec<Scalar>,
+    pub(super) a_O: Vec<Scalar>,
+    pub(super) v_vec: Vec<Scalar>,
+    pub(super) gamma_vec: Vec<Scalar>,
+    pub commitment_vec: Vec<RistrettoPoint>,
     pending_multiplier: Option<usize>,
 }
 
@@ -26,6 +31,7 @@ impl ConstraintSystem for R1CSProver {
             a_O: Vec::new(),
             v_vec: Vec::new(),
             gamma_vec: Vec::new(),
+            commitment_vec: Vec::new(),
             pending_multiplier: None,
         }
     }
@@ -48,7 +54,6 @@ impl ConstraintSystem for R1CSProver {
         right.terms.push((r_var, -Scalar::one()));
         self.constrain(left);
         self.constrain(right);
-
         (l_var, r_var, o_var)
     }
     //
@@ -87,7 +92,6 @@ impl ConstraintSystem for R1CSProver {
         self.a_L.push(l);
         self.a_R.push(r);
         self.a_O.push(o);
-
         Ok((l_var, r_var, o_var))
     }
     //
@@ -112,6 +116,7 @@ impl R1CSProver {
         self.v_vec.push(v);
         self.gamma_vec.push(gamma);
         let V = pk.commitment(&v, &gamma);
+        self.commitment_vec.push(V);
         (V, Variable::Committed(i))
     }
     //

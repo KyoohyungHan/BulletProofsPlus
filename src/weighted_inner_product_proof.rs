@@ -10,16 +10,16 @@ use std::mem;
 
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
+use curve25519_dalek::traits::VartimeMultiscalarMul;
 use merlin::Transcript;
 
-use crate::util::weighted_inner_product;
 use crate::errors::ProofError;
-use crate::transcript::TranscriptProtocol;
 use crate::publickey::PublicKey;
+use crate::transcript::TranscriptProtocol;
+use crate::util::weighted_inner_product;
 
 /**
- * Wieghted Inner Product Proof
+ * Wieghted inner product proof
  * The size of the proof is
  *   2 * log_2{n} + 2 : CompressedRistretto,
  *   3 : Scalar
@@ -36,7 +36,9 @@ pub struct WeightedInnerProductProof {
 }
 
 impl WeightedInnerProductProof {
-    //
+    /**
+     * Prove weighted inner product
+     */
     pub fn prove(
         transcript: &mut Transcript,
         pk: &PublicKey,
@@ -66,8 +68,8 @@ impl WeightedInnerProductProof {
         assert_eq!(power_of_y.len(), n);
         // the length should be power of two
         assert!(n.is_power_of_two());
-        // set transcrypt dimension
-        transcript.innerproduct_domain_sep(n as u64);
+        // set transcript weight vector
+        transcript.weighted_inner_product_domain_sep(power_of_y_vec);
         // allocate memory for L_vec and R_vec
         let logn = n.next_power_of_two().trailing_zeros() as usize;
         let mut L_vec: Vec<CompressedRistretto> = Vec::with_capacity(logn);
@@ -175,117 +177,16 @@ impl WeightedInnerProductProof {
             d_prime: d_prime,
         }
     }
-    //
-    #[allow(dead_code)]
+    /**
+     * To represent all verification process in one
+     * multi-exponentiation, this function gets exponents
+     * of commitment which can be computted publicly.
+     *
+     * Commitment = A' + Sum G_exp[i] * G_vec[i]
+     *             + Sum H_exp[i] * H_vec[i]
+     *             + g_exp * g + Sum V_exp * V
+     */
     pub fn verify(
-        &self,
-        transcript: &mut Transcript,
-        pk: &PublicKey,
-        power_of_y_vec: &Vec<Scalar>,
-        commitment: RistrettoPoint,
-    ) -> Result<(), ProofError> {
-        use curve25519_dalek::traits::{IsIdentity};
-        let logn = self.L_vec.len();
-        let n = (1 << logn) as usize;
-        transcript.innerproduct_domain_sep(n as u64);
-        // get challenge vector
-        let mut challenges = Vec::with_capacity(logn);
-        for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
-            transcript.validate_and_append_point(b"L", L)?;
-            transcript.validate_and_append_point(b"R", R)?;
-            challenges.push(transcript.challenge_scalar(b"e"));
-        }
-        let mut challenges_inv = challenges.clone();
-        let allinv = Scalar::batch_invert(&mut challenges_inv);
-        // compute squre of challenges
-        for i in 0..logn {
-            challenges[i] = challenges[i] * challenges[i];
-            challenges_inv[i] = challenges_inv[i] * challenges_inv[i];
-        }
-        let mut challenges_sqr = challenges;
-        let mut challenges_inv_sqr = challenges_inv;
-        // compute (c0/c0, c0/c1, c0/c2, ...) for ci = y^{i+1}
-        let mut power_of_y_vec_inv = Vec::with_capacity(n);
-        power_of_y_vec_inv.push(Scalar::one());
-        for i in 1..n {
-            power_of_y_vec_inv.push(power_of_y_vec[i - 1].invert());
-        }
-        // get the last challenge
-        transcript.validate_and_append_point(b"A", &self.A)?;
-        transcript.validate_and_append_point(b"B", &self.B)?;
-        let e = transcript.challenge_scalar(b"e");
-        let e_sqr = e * e;
-        // compute s and s' vector
-        let mut s_vec = Vec::with_capacity(n);
-        s_vec.push(allinv);
-        for i in 1..n {
-            let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
-            let k = 1 << log_i;
-            let u_log_i_sq = challenges_sqr[(logn - 1) - log_i];
-            s_vec.push(s_vec[i - k] * u_log_i_sq);
-        }
-        let s_prime_vec: Vec<Scalar> = s_vec
-            .clone()
-            .into_iter()
-            .rev()
-            .collect::<Vec<Scalar>>();
-        for i in 1..n {
-            s_vec[i] *= power_of_y_vec_inv[i];
-        }
-        // compute e_i^2 * e^2 and e_i^{-2} * e^2
-        for i in 0..logn {
-            challenges_sqr[i] = challenges_sqr[i] * e_sqr;
-            challenges_inv_sqr[i] = challenges_inv_sqr[i] * e_sqr;
-        }
-        let Ls_exp = challenges_sqr;
-        let Rs_exp = challenges_inv_sqr;
-        // decompress L_vec, R_vec, A, and B
-        let Ls = self
-            .L_vec
-            .iter()
-            .map(|p| p.decompress().ok_or(ProofError::VerificationError))
-            .collect::<Result<Vec<_>, _>>()?;
-        let Rs = self
-            .R_vec
-            .iter()
-            .map(|p| p.decompress().ok_or(ProofError::VerificationError))
-            .collect::<Result<Vec<_>, _>>()?;
-        let As = match self.A.decompress() {
-            Some(point) => point,
-            None => panic!("fail to decompress"),
-        };
-        let Bs = match self.B.decompress() {
-            Some(point) => point,
-            None => panic!("fail to decompress"),
-        };
-        // compute RHS / LHS
-        let G_exp: Vec<Scalar> = s_vec.iter().map(|s_vec_i| -s_vec_i * self.r_prime * e).collect();
-        let H_exp: Vec<Scalar> = s_prime_vec.iter().map(|s_prime_vec_i| -s_prime_vec_i * self.s_prime * e).collect();
-        let g_exp = -self.r_prime * power_of_y_vec[0] * self.s_prime;
-        let h_exp = -self.d_prime;
-        let scalars1 = Ls_exp
-            .iter()
-            .chain(Rs_exp.iter())
-            .chain(iter::once(&e_sqr))
-            .chain(iter::once(&e));
-        let scalars2 = G_exp.iter()
-            .chain(H_exp.iter())
-            .chain(iter::once(&g_exp))
-            .chain(iter::once(&h_exp));
-        let points = Ls
-            .iter()
-            .chain(Rs.iter())
-            .chain(iter::once(&commitment))
-            .chain(iter::once(&As));
-        let expected = Bs + pk.precomputed_table2.vartime_mixed_multiscalar_mul(scalars2, scalars1, points);
-        // check LSH == RHS
-        if expected.is_identity() {
-            Ok(())
-        } else {
-            Err(ProofError::VerificationError)
-        }
-    }
-    pub fn verify_with_exponents_of_a_hat(
         &self,
         transcript: &mut Transcript,
         pk: &PublicKey,
@@ -296,11 +197,12 @@ impl WeightedInnerProductProof {
         V_exp_of_commitment: &[Scalar],
         A_prime: RistrettoPoint,
         V: &[RistrettoPoint],
-    )-> Result<(), ProofError> {
-        use curve25519_dalek::traits::{IsIdentity};
+    ) -> Result<(), ProofError> {
+        use curve25519_dalek::traits::IsIdentity;
         let logn = self.L_vec.len();
         let n = (1 << logn) as usize;
-        transcript.innerproduct_domain_sep(n as u64);
+        // set transcript weight vector
+        transcript.weighted_inner_product_domain_sep(power_of_y_vec);
         // get challenge vector
         let mut challenges = Vec::with_capacity(logn);
         for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
@@ -320,7 +222,8 @@ impl WeightedInnerProductProof {
         // compute (c0/c0, c0/c1, c0/c2, ...) for ci = y^{i+1}
         let mut power_of_y_vec_inv = power_of_y_vec.clone();
         let _ = Scalar::batch_invert(&mut power_of_y_vec_inv);
-        let power_of_y_vec_inv: Vec<Scalar> = power_of_y_vec_inv.iter()
+        let power_of_y_vec_inv: Vec<Scalar> = power_of_y_vec_inv
+            .iter()
             .map(|power_of_y_vec_inv_i| power_of_y_vec_inv_i * power_of_y_vec[0])
             .collect();
         // get the last challenge
@@ -337,22 +240,33 @@ impl WeightedInnerProductProof {
             let u_log_i_sq = challenges_sqr[(logn - 1) - log_i];
             s_vec.push(s_vec[i - k] * u_log_i_sq);
         }
-        let s_prime_vec: Vec<Scalar> = s_vec
-            .clone()
-            .into_iter()
-            .rev()
-            .collect();
+        let s_prime_vec: Vec<Scalar> = s_vec.clone().into_iter().rev().collect();
         for i in 1..n {
             s_vec[i] *= power_of_y_vec_inv[i];
         }
         // compute RHS / LHS
-        let Ls_exp = challenges_sqr.iter().map(|challenges_sqr_i| challenges_sqr_i * e_sqr);
-        let Rs_exp = challenges_inv_sqr.iter().map(|challenges_inv_sqr_i| challenges_inv_sqr_i * e_sqr);
-        let G_exp = s_vec.iter().zip(G_exp_of_commitment.iter()).map(|(s_vec_i, g_exp_of_comm_i)| -s_vec_i * self.r_prime * e + g_exp_of_comm_i * e_sqr);
-        let H_exp = s_prime_vec.iter().zip(H_exp_of_commitment.iter()).map(|(s_prime_vec_i, h_exp_of_comm_i)| -s_prime_vec_i * self.s_prime * e + h_exp_of_comm_i * e_sqr);
+        let Ls_exp = challenges_sqr
+            .iter()
+            .map(|challenges_sqr_i| challenges_sqr_i * e_sqr);
+        let Rs_exp = challenges_inv_sqr
+            .iter()
+            .map(|challenges_inv_sqr_i| challenges_inv_sqr_i * e_sqr);
+        let G_exp = s_vec
+            .iter()
+            .zip(G_exp_of_commitment.iter())
+            .map(|(s_vec_i, g_exp_of_comm_i)| {
+                -s_vec_i * self.r_prime * e + g_exp_of_comm_i * e_sqr
+            });
+        let H_exp = s_prime_vec.iter().zip(H_exp_of_commitment.iter()).map(
+            |(s_prime_vec_i, h_exp_of_comm_i)| {
+                -s_prime_vec_i * self.s_prime * e + h_exp_of_comm_i * e_sqr
+            },
+        );
         let g_exp = -self.r_prime * power_of_y_vec[0] * self.s_prime + *g_exp_of_commitment * e_sqr;
         let h_exp = -self.d_prime;
-        let V_exp = V_exp_of_commitment.iter().map(|V_exp_of_commitment_i| V_exp_of_commitment_i * e_sqr);
+        let V_exp = V_exp_of_commitment
+            .iter()
+            .map(|V_exp_of_commitment_i| V_exp_of_commitment_i * e_sqr);
         let expected = RistrettoPoint::optional_multiscalar_mul(
             iter::once(Scalar::one())
                 .chain(iter::once(e))
@@ -374,7 +288,8 @@ impl WeightedInnerProductProof {
                 .chain(pk.G_vec.iter().map(|&x| Some(x)))
                 .chain(pk.H_vec.iter().map(|&x| Some(x)))
                 .chain(V.iter().map(|&v| Some(v))),
-        ).ok_or_else(|| ProofError::VerificationError)?;
+        )
+        .ok_or_else(|| ProofError::VerificationError)?;
         // check LSH == RHS
         if expected.is_identity() {
             Ok(())

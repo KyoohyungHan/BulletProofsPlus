@@ -6,6 +6,10 @@ use curve25519_dalek::scalar::Scalar;
 use super::{ConstraintSystem, LinearCombination, Variable};
 use crate::errors::R1CSError;
 
+/**
+ * R1CS Verifier which containts
+ * constraints system 
+ */
 pub struct R1CSVerifier {
     pub constraints: Vec<LinearCombination>,
     pub num_vars: usize,

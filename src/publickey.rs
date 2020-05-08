@@ -10,6 +10,9 @@ use curve25519_dalek::ristretto::{RistrettoPoint, VartimeRistrettoPrecomputation
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::VartimePrecomputedMultiscalarMul;
 
+/**
+ * Publickey 
+ */
 pub struct PublicKey {
     pub g: RistrettoPoint,
     pub h: RistrettoPoint,
@@ -17,7 +20,6 @@ pub struct PublicKey {
     pub H_vec: Vec<RistrettoPoint>,
     pub precomputed_table1: VartimeRistrettoPrecomputation,
     pub precomputed_table2: VartimeRistrettoPrecomputation,
-    pub precomputed_table3: VartimeRistrettoPrecomputation,
 }
 
 impl PublicKey {
@@ -32,7 +34,6 @@ impl PublicKey {
         let H_vec: Vec<RistrettoPoint> = (0..length)
             .map(|_| RistrettoPoint::random(&mut csprng))
             .collect();
-        let G_vec_sum: RistrettoPoint = G_vec.iter().sum();
         // pre-compute for a * g + b * h computation
         let precomputed_table1 = VartimeRistrettoPrecomputation::new(
             iter::once(&g)
@@ -45,12 +46,6 @@ impl PublicKey {
             .chain(iter::once(g))
             .chain(iter::once(h))
         );
-        // pre-compute for z * (Sum G_i) + Sum b_i H_i + x * g + y * h
-        let precomputed_table3 = VartimeRistrettoPrecomputation::new(
-            iter::once(&G_vec_sum)
-            .chain(H_vec.iter())
-            .chain(iter::once(&g))
-        );
         PublicKey {
             g: g,
             h: h,
@@ -58,7 +53,6 @@ impl PublicKey {
             H_vec: H_vec,
             precomputed_table1: precomputed_table1,
             precomputed_table2: precomputed_table2,
-            precomputed_table3: precomputed_table3,
         }
     }
     //

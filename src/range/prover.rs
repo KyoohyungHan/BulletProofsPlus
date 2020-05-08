@@ -5,6 +5,9 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 
 use crate::publickey::PublicKey;
 
+/**
+ * Range Prover which contains witness 
+ */
 pub struct RangeProver {
     pub(crate) v_vec: Vec<u64>,
     pub(crate) gamma_vec: Vec<Scalar>,

@@ -29,11 +29,12 @@ impl R1CSProof {
         transcript: &mut Transcript,
         pk: &PublicKey,
         prover: &R1CSProver,
-        commitment_vec: &[RistrettoPoint],
     ) -> Self {
         let n = prover.a_L.len();
         assert_eq!(prover.a_R.len(), n);
         assert_eq!(prover.a_O.len(), n);
+        assert_eq!(pk.G_vec.len(), 2 * n);
+        assert_eq!(pk.H_vec.len(), 2 * n);
         let m = prover.v_vec.len();
         assert_eq!(prover.gamma_vec.len(), m);
         // compute A
@@ -81,7 +82,7 @@ impl R1CSProof {
                 .chain(pk.G_vec.iter().cloned())
                 .chain(pk.H_vec.iter().cloned())
                 .chain(iter::once(pk.g))
-                .chain(commitment_vec.iter().cloned()),
+                .chain(prover.commitment_vec.iter().cloned()),
         );
         // compute a_vec, b_vec, alpha_hat
         let mut a_vec: Vec<Scalar> = Vec::with_capacity(2 * n);
@@ -115,9 +116,9 @@ impl R1CSProof {
         transcript: &mut Transcript,
         pk: &PublicKey,
         verifier: &R1CSVerifier,
-        commitment_vec: &[RistrettoPoint],
     ) -> Result<(), ProofError> {
         let n = verifier.num_vars;
+        // get challenges
         transcript.append_point(b"A", &self.A);
         let y = transcript.challenge_scalar(b"y");
         let z = transcript.challenge_scalar(b"z");
@@ -145,7 +146,7 @@ impl R1CSProof {
         let g_exp = zQ_C + util::weighted_inner_product(&G1_exp, &H1_exp, &power_of_y1);
         let V_exp = zQ_WV;
         // verify weighted inner product proof
-        self.proof.verify_with_exponents_of_a_hat(
+        self.proof.verify(
             transcript,
             pk,
             &power_of_y,
@@ -154,7 +155,7 @@ impl R1CSProof {
             &g_exp,
             &V_exp,
             As,
-            &commitment_vec,
+            &(verifier.commitment_vec),
         )
     }
 }
@@ -242,158 +243,18 @@ mod tests {
         let proof = R1CSProof::prove(
             &mut transcript,
             &pk,
-            &prover,
-            &commitment_vec);
+            &prover);
         let mut transcript = Transcript::new(b"R1CS Test");
         let result = proof.verify(
             &mut transcript,
             &pk,
-            &verifier,
-            &commitment_vec);
+            &verifier);
         assert_eq!(result, Ok(()));
     }
     #[test]
     fn test_matmul_r1cs_all() {
         test_matmul_r1cs(2 as usize);
         test_matmul_r1cs(4 as usize);
-    }
-    
-    use test::Bencher;
-    #[allow(dead_code)]
-    fn bench_matmul_prove(b: &mut Bencher, n: usize) {
-        let pk = PublicKey::new(2 * n * n * n);
-        //
-        let mut prover: R1CSProver = ConstraintSystem::new();
-        //
-        let mut matrix1 = Vec::with_capacity(n * n);
-        let mut matrix2 = Vec::with_capacity(n * n);
-        for _i in 0..(n*n) {
-            matrix1.push(Scalar::random(&mut OsRng));
-            matrix2.push(Scalar::random(&mut OsRng));
-        }
-        let mut r = vec![Scalar::zero(); n*n];
-        for i in 0..n {
-            for j in 0..n {
-                for k in 0..n {
-                    r[n * i + j] += matrix1[n * i + k] * matrix2[n * k + j];
-                }
-            }
-        }
-        //
-        let mut var1 = Vec::with_capacity(n * n);
-        let mut var2 = Vec::with_capacity(n * n);
-        let mut commitment_vec = Vec::with_capacity(2 * n * n);
-        for i in 0..n {
-            for j in 0..n {
-                let (comm, var) = prover.commit(&pk, matrix1[n * i + j].into(), Scalar::random(&mut OsRng));
-                var1.push(var);
-                commitment_vec.push(comm);
-            }
-        }
-        for i in 0..n {
-            for j in 0..n {
-                let (comm, var) = prover.commit(&pk, matrix2[n * i + j].into(), Scalar::random(&mut OsRng));
-                var2.push(var);
-                commitment_vec.push(comm);
-            }
-        }
-        gadget(&mut prover, &var1, &var2, &r, n);
-        //
-        let mut transcript = Transcript::new(b"R1CS Test");
-        b.iter(|| R1CSProof::prove(
-            &mut transcript,
-            &pk,
-            &prover,
-            &commitment_vec));
-    }
-    #[allow(dead_code)]
-    fn bench_matmul_verify(b: &mut Bencher, n: usize) {
-        let pk = PublicKey::new(2 * n * n * n);
-        //
-        let mut prover: R1CSProver = ConstraintSystem::new();
-        let mut verifier: R1CSVerifier = ConstraintSystem::new();
-        //
-        let mut matrix1 = Vec::with_capacity(n * n);
-        let mut matrix2 = Vec::with_capacity(n * n);
-        for _i in 0..(n*n) {
-            matrix1.push(Scalar::random(&mut OsRng));
-            matrix2.push(Scalar::random(&mut OsRng));
-        }
-        let mut r = vec![Scalar::zero(); n*n];
-        for i in 0..n {
-            for j in 0..n {
-                for k in 0..n {
-                    r[n * i + j] += matrix1[n * i + k] * matrix2[n * k + j];
-                }
-            }
-        }
-        //
-        let mut var1 = Vec::with_capacity(n * n);
-        let mut var2 = Vec::with_capacity(n * n);
-        let mut commitment_vec = Vec::with_capacity(2 * n * n);
-        for i in 0..n {
-            for j in 0..n {
-                let (comm, var) = prover.commit(&pk, matrix1[n * i + j].into(), Scalar::random(&mut OsRng));
-                var1.push(var);
-                commitment_vec.push(comm);
-            }
-        }
-        for i in 0..n {
-            for j in 0..n {
-                let (comm, var) = prover.commit(&pk, matrix2[n * i + j].into(), Scalar::random(&mut OsRng));
-                var2.push(var);
-                commitment_vec.push(comm);
-            }
-        }
-        gadget(&mut prover, &var1, &var2, &r, n);
-        //
-        let mut var1 = Vec::with_capacity(n * n);
-        let mut var2 = Vec::with_capacity(n * n);
-        for i in 0..(n*n) {
-            let var = verifier.commit(commitment_vec[i]);
-            var1.push(var);
-        }
-        for i in 0..(n*n) {
-            let var = verifier.commit(commitment_vec[(n*n)+i]);
-            var2.push(var);
-        }
-        gadget(&mut verifier, &var1, &var2, &r, n);
-        //
-        let mut transcript = Transcript::new(b"R1CS Test");
-        let proof = R1CSProof::prove(
-            &mut transcript,
-            &pk,
-            &prover,
-            &commitment_vec);
-        let mut transcript = Transcript::new(b"R1CS Test");
-        b.iter(|| proof.verify(
-            &mut transcript,
-            &pk,
-            &verifier,
-            &commitment_vec));
-    }
-    #[bench]
-    fn bench_matmul_prove_2x2(b: &mut Bencher) {
-        bench_matmul_prove(b, 2 as usize);
-    }
-    #[bench]
-    fn bench_matmul_verify_2x2(b: &mut Bencher) {
-        bench_matmul_verify(b, 2 as usize);
-    }
-    #[bench]
-    fn bench_matmul_prove_4x4(b: &mut Bencher) {
-        bench_matmul_prove(b, 4 as usize);
-    }
-    #[bench]
-    fn bench_matmul_verify_4x4(b: &mut Bencher) {
-        bench_matmul_verify(b, 4 as usize);
-    }
-    #[bench]
-    fn bench_matmul_prove_8x8(b: &mut Bencher) {
-        bench_matmul_prove(b, 8 as usize);
-    }
-    #[bench]
-    fn bench_matmul_verify_8x8(b: &mut Bencher) {
-        bench_matmul_verify(b, 8 as usize);
+        test_matmul_r1cs(8 as usize);
     }
 }

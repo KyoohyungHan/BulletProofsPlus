@@ -325,7 +325,7 @@ impl RangeProof {
         let mut g_exp: Scalar = power_of_y.iter().sum();
         g_exp *= z - z * z;
         g_exp -= (util::scalar_exp_vartime(&two, n as u64) - one) * V_exp * z;
-        self.proof.verify_with_exponents_of_a_hat(
+        self.proof.verify(
             transcript,
             &pk,
             &power_of_y,
@@ -385,7 +385,7 @@ impl RangeProof {
         g_exp *= z - z_sqr;
         let d_sum: Scalar = d.iter().sum();
         g_exp -= d_sum * power_of_y_mn_plus_1 * z;
-        self.proof.verify_with_exponents_of_a_hat(
+        self.proof.verify(
             transcript,
             &pk,
             &power_of_y,
@@ -409,7 +409,6 @@ impl RangeProof {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //
     #[allow(dead_code)]
     fn range_proof(
         n: usize,
@@ -438,146 +437,15 @@ mod tests {
         );
         assert_eq!(result, Ok(()));
     }
-    //
-    use test::Bencher;
-    #[allow(dead_code)]
-    fn bench_range_prove(b: &mut Bencher, n: usize, m: usize) {
-        let pk = PublicKey::new(m * n);
-        let mut prover = RangeProver::new();
-        for _i in 0..m {
-            prover.commit(&pk, 31u64, Scalar::random(&mut OsRng));
-        }
-        let mut prover_transcript = Transcript::new(b"RangeProof Test");
-        b.iter(|| RangeProof::prove(&mut prover_transcript, &pk, n, &prover));
-    }
-    //
-    #[allow(dead_code)]
-    fn bench_range_verify(b: &mut Bencher, n: usize, m: usize) {
-        let pk = PublicKey::new(m * n);
-        let mut prover = RangeProver::new();
-        for _i in 0..m {
-            prover.commit(&pk, 31u64, Scalar::random(&mut OsRng));
-        }
-        let mut verifier = RangeVerifier::new();
-        verifier.allocate(&prover.commitment_vec);
-        let mut prover_transcript = Transcript::new(b"RangeProof Test");
-        let proof = RangeProof::prove(
-            &mut prover_transcript,
-            &pk,
-            n,
-            &prover);
-        let mut verifier_transcript = Transcript::new(b"RangeProof Test");
-        b.iter(|| proof.verify(&mut verifier_transcript, &pk, n, &verifier));
-    }
-    //
     #[test]
-    fn range_proof_32() {
+    fn test_range_proof_all() {
         range_proof(32 as usize, 1 as usize);
         range_proof(32 as usize, 2 as usize);
         range_proof(32 as usize, 4 as usize);
         range_proof(32 as usize, 8 as usize);
-    }
-    #[test]
-    fn range_proof_64() {
         range_proof(64 as usize, 1 as usize);
         range_proof(64 as usize, 2 as usize);
         range_proof(64 as usize, 4 as usize);
         range_proof(64 as usize, 8 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_32x1(b: &mut Bencher) {
-        bench_range_prove(b, 32 as usize, 1 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_32x1(b: &mut Bencher) {
-        bench_range_verify(b, 32 as usize, 1 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_32x2(b: &mut Bencher) {
-        bench_range_prove(b, 32 as usize, 2 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_32x2(b: &mut Bencher) {
-        bench_range_verify(b, 32 as usize, 2 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_32x4(b: &mut Bencher) {
-        bench_range_prove(b, 32 as usize, 4 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_32x4(b: &mut Bencher) {
-        bench_range_verify(b, 32 as usize, 4 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_32x8(b: &mut Bencher) {
-        bench_range_prove(b, 32 as usize, 8 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_32x8(b: &mut Bencher) {
-        bench_range_verify(b, 32 as usize, 8 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x1(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 1 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x1(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 1 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x2(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 2 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x2(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 2 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x4(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 4 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x4(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 4 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x8(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 8 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x8(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 8 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x16(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 16 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x16(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 16 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x32(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 32 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x32(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 32 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x64(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 64 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x64(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 64 as usize);
-    }
-    #[bench]
-    fn bench_range_prove_64x128(b: &mut Bencher) {
-        bench_range_prove(b, 64 as usize, 128 as usize);
-    }
-    #[bench]
-    fn bench_range_verify_64x128(b: &mut Bencher) {
-        bench_range_verify(b, 64 as usize, 128 as usize);
     }
 }
