@@ -158,7 +158,10 @@ impl WeightedInnerProductProof {
             &[G[0], H[0], pk.g, pk.h],
         )
         .compress();
-        let B = RistrettoPoint::vartime_multiscalar_mul(&[rcs, eta], &[pk.g, pk.h]).compress();
+        let B = RistrettoPoint::vartime_multiscalar_mul(
+            &[rcs, eta],
+            &[pk.g, pk.h],
+        ).compress();
         // get challenge e
         transcript.append_point(b"A", &A);
         transcript.append_point(b"B", &B);
