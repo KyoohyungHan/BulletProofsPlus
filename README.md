@@ -1,5 +1,5 @@
-# ImprovedBulletProof
-A pure rust implementation of Bulletproof+ Scheme
+# BulletProofs+
+A pure rust implementation of Bulletproofs+ Scheme
 
 ## Bulletproof+
 This scheme is simpler with smaller proof size than the original bulletproof scheme. We used weighted inner product zero-knowledge argument instead of inner product argument.
