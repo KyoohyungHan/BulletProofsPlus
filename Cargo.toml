@@ -1,5 +1,5 @@
 [package]
-name = "improvedbulletproof"
+name = "bulletproofsplus"
 version = "0.1.0"
 authors = ["KyoohyungHan <satanigh89@gmail.com>"]
 edition = "2018"
