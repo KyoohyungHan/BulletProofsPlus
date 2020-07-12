@@ -1,5 +1,7 @@
 # BulletProofs+
-A pure rust implementation of Bulletproofs+ Scheme
+A pure rust implementation of Bulletproofs+ Scheme.
+Details about this scheme can be found in "Bulletproofs+: Shorter Proofs for Privacy-Enhanced Distributed Ledger", Heewon Chung and Kyoohyung Han and Chanyang Ju and Myungsun Kim and Jae Hong Seo (see https://eprint.iacr.org/2020/735).
+
 
 ## Bulletproof+
 This scheme is simpler with smaller proof size than the original bulletproof scheme. We used weighted inner product zero-knowledge argument instead of inner product argument.
