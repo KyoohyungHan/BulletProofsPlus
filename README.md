@@ -4,6 +4,16 @@ A pure rust implementation of Bulletproofs+ Scheme
 ## Bulletproof+
 This scheme is simpler with smaller proof size than the original bulletproof scheme. We used weighted inner product zero-knowledge argument instead of inner product argument.
 
+### Compile
+To run main.rs,
+```rust
+cargo +nightly run --release
+```
+To run basic tests,
+```rust
+cargo +nightly test --release
+```
+
 ### Example - Range Proof
 ```rust
 use rand_core::OsRng;
