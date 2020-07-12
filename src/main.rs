@@ -14,7 +14,7 @@ fn main() {
         prover.commit(&pk, 31u64, Scalar::random(&mut OsRng));
     }
     let mut prover_transcript = Transcript::new(b"RangeProof Test");
-    println!("Prove Range");
+    println!("Prove All Values are in [0, 2^32)");
     let proof: RangeProof = RangeProof::prove(
         &mut prover_transcript,
         &pk,

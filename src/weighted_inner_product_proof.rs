@@ -185,9 +185,9 @@ impl WeightedInnerProductProof {
      * multi-exponentiation, this function gets exponents
      * of commitment which can be computted publicly.
      *
-     * Commitment = A' + Sum G_exp[i] * G_vec[i]
-     *             + Sum H_exp[i] * H_vec[i]
-     *             + g_exp * g + Sum V_exp * V
+     * Commitment = A' + Sum G_vec[i] * G_exp_of_commitment[i]
+     *             + Sum H_vec[i] * H_exp_of_commitment[i]
+     *             + g * g_exp_of_commitment + Sum V * V_exp_of_commitment
      */
     pub fn verify(
         &self,

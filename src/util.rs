@@ -1,3 +1,8 @@
+/**
+ * This code is mostly copied from
+ * https://github.com/dalek-cryptography/bulletproofs
+ */
+
 use curve25519_dalek::scalar::Scalar;
 
 pub struct ScalarExp {

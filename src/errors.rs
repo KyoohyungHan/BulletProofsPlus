@@ -1,3 +1,8 @@
+/**
+ * This code is copied from
+ * https://github.com/dalek-cryptography/bulletproofs
+ */
+
 //! Errors related to proving and verifying proofs.
 
 extern crate alloc;

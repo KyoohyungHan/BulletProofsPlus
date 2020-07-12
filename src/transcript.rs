@@ -1,3 +1,8 @@
+/**
+ * This code is mostly copied from
+ * https://github.com/dalek-cryptography/bulletproofs
+ */
+
 //! Defines a `TranscriptProtocol` trait for using a Merlin transcript.
 
 use curve25519_dalek::ristretto::CompressedRistretto;
