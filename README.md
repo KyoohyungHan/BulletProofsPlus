@@ -15,6 +15,10 @@ To run basic tests,
 ```rust
 cargo +nightly test --release
 ```
+To run benchmark,
+```rust
+cargo +nightly bench
+```
 
 ### Example - Range Proof
 ```rust
