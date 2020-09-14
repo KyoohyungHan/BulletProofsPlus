@@ -3,7 +3,7 @@
  * https://github.com/dalek-cryptography/bulletproofs
  */
 
-//! Errors related to proving and verifying proofs.
+/// Errors related to proving and verifying proofs.
 
 extern crate alloc;
 use alloc::vec::Vec;

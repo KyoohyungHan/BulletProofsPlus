@@ -11,7 +11,7 @@ use std::mem;
 
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{VartimeMultiscalarMul};
+use curve25519_dalek::traits::{VartimeMultiscalarMul, IsIdentity};
 use merlin::Transcript;
 
 use super::{RangeProver, RangeVerifier};
@@ -217,7 +217,7 @@ impl RangeProof {
             .clone()
             .into_iter()
             .rev()
-            .collect::<Vec<Scalar>>();
+            .collect();
         let z_sqr = z * z;
         let power_of_z: Vec<Scalar> = util::exp_iter_type2(z_sqr).take(m).collect();
         let d: Vec<Scalar> = power_of_z
@@ -346,56 +346,95 @@ impl RangeProof {
         commitment_vec: &[RistrettoPoint],
     ) -> Result<(), ProofError> {
         let mn = n * m;
-        // get challenge
+
+        // 1. Recompute y and z
+
         transcript.validate_and_append_point(b"A", &self.A)?;
         let y = transcript.challenge_scalar(b"y");
         let z = transcript.challenge_scalar(b"z");
-        // decompress A
-        let As = match self.A.decompress() {
-            Some(point) => point,
-            None => panic!("fail to decompress"),
-        };
-        // compute d
+        let minus_z = -z;
+        let z_sqr = z * z;
+
+        // 2. Compute power of two, power of y, power of z
+        
         let power_of_two: Vec<Scalar> = util::exp_iter_type1(Scalar::from(2u64)).take(n).collect();
         let power_of_y: Vec<Scalar> = util::exp_iter_type2(y).take(mn).collect();
-        let power_of_y_rev: Vec<Scalar> = power_of_y
-            .clone()
-            .into_iter()
-            .rev()
-            .collect::<Vec<Scalar>>();
-        let z_sqr = z * z;
+        let power_of_y_rev: Vec<Scalar> = power_of_y.clone().into_iter().rev().collect();
         let power_of_z: Vec<Scalar> = util::exp_iter_type2(z_sqr).take(m).collect();
-        let d: Vec<Scalar> = power_of_z
+        let power_of_y_mn_plus_1 = util::scalar_exp_vartime(&y, (mn + 1) as u64);
+
+        // 3. Compute concat_z_and_2
+
+        let concat_z_and_2: Vec<Scalar> = power_of_z
             .iter()
             .flat_map(|exp_z| power_of_two.iter().map(move |exp_2| exp_2 * exp_z))
             .collect();
-        // compute A_hat exp
-        let G_exp: Vec<Scalar> = vec![-z; mn];
-        let H_exp: Vec<Scalar> = d
-            .iter()
-            .zip(power_of_y_rev.iter())
-            .map(|(d_i, power_of_y_rev_i)| d_i * power_of_y_rev_i + z)
+        
+        // 4. Compute scalars for verification
+
+        let (challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e)
+            = self.proof.verification_scalars(mn, &power_of_y, transcript)?;
+        let e_sqr = e * e;
+        
+        // 5. Compute exponents of G_vec, H_vec, g, and h
+
+        let r_prime = self.proof.r_prime;
+        let s_prime = self.proof.s_prime;
+        let d_prime = self.proof.d_prime;
+        let G_exp: Vec<Scalar> = s_vec.iter()
+            .map(|s_vec_i| minus_z * e_sqr - s_vec_i * r_prime * e)
             .collect();
-        let power_of_y_mn_plus_1 = util::scalar_exp_vartime(&y, (mn + 1) as u64);
+        let H_exp: Vec<Scalar> = s_prime_vec.iter()
+            .zip(concat_z_and_2.iter())
+            .zip(power_of_y_rev.iter())
+            .map(|((s_prime_vec_i, d_i), power_of_y_rev_i)| - s_prime * e * s_prime_vec_i + (d_i * power_of_y_rev_i + z) * e_sqr)
+            .collect();
+        let sum_y = util::sum_of_powers_type2(&y, mn);
+        let sum_2 = util::sum_of_powers_type1(&Scalar::from(2u64), n);
+        let sum_z = util::sum_of_powers_type2(&z_sqr, m);
+        let g_exp = -r_prime * s_prime * y + (sum_y * (z - z_sqr) - power_of_y_mn_plus_1 * z * sum_2 * sum_z) * e_sqr;
+        let h_exp = -d_prime;
+        
+        // 6. Compute exponents of L_vec, R_vec, V_vec
+
+        let Ls_exp: Vec<Scalar> = challenges_sqr.iter().map(|e_sqr_i| e_sqr_i * e_sqr).collect();
+        let Rs_exp: Vec<Scalar> = challenges_inv_sqr.iter().map(|e_inv_sqr_i| e_inv_sqr_i * e_sqr).collect();
         let V_exp: Vec<Scalar> = power_of_z
             .iter()
-            .map(|power_of_z_i| power_of_z_i * power_of_y_mn_plus_1)
+            .map(|power_of_z_i| power_of_z_i * power_of_y_mn_plus_1 * e_sqr)
             .collect();
-        let mut g_exp: Scalar = power_of_y.iter().sum();
-        g_exp *= z - z_sqr;
-        let d_sum: Scalar = d.iter().sum();
-        g_exp -= d_sum * power_of_y_mn_plus_1 * z;
-        self.proof.verify(
-            transcript,
-            &pk,
-            &power_of_y,
-            &G_exp,
-            &H_exp,
-            &g_exp,
-            &V_exp,
-            As,
-            &commitment_vec,
+        
+        // 7. Compute RHS / LHS
+
+        let expected = RistrettoPoint::optional_multiscalar_mul(
+            iter::once(Scalar::one())
+                .chain(iter::once(e))
+                .chain(iter::once(e_sqr))
+                .chain(iter::once(g_exp))
+                .chain(iter::once(h_exp))
+                .chain(Ls_exp)
+                .chain(Rs_exp)
+                .chain(G_exp)
+                .chain(H_exp)
+                .chain(V_exp),
+            iter::once(self.proof.B.decompress())
+                .chain(iter::once(self.proof.A.decompress()))
+                .chain(iter::once(self.A.decompress()))
+                .chain(iter::once(Some(pk.g)))
+                .chain(iter::once(Some(pk.h)))
+                .chain(self.proof.L_vec.iter().map(|L| L.decompress()))
+                .chain(self.proof.R_vec.iter().map(|R| R.decompress()))
+                .chain(pk.G_vec.iter().map(|&x| Some(x)))
+                .chain(pk.H_vec.iter().map(|&x| Some(x)))
+                .chain(commitment_vec.iter().map(|&v| Some(v))),
         )
+        .ok_or_else(|| ProofError::VerificationError)?;
+        
+        if expected.is_identity() {
+            Ok(())
+        } else {
+            Err(ProofError::VerificationError)
+        }
     }
     //
     pub fn size(&self) -> usize {
@@ -409,6 +448,8 @@ impl RangeProof {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test::Bencher;
+
     #[allow(dead_code)]
     fn range_proof(
         n: usize,
@@ -448,4 +489,60 @@ mod tests {
         range_proof(64 as usize, 4 as usize);
         range_proof(64 as usize, 8 as usize);
     }
+
+    fn range_proof_verify(b: &mut Bencher, n: usize, m: usize) {
+        let pk = PublicKey::new(n * m);
+        let mut prover = RangeProver::new();
+        for _i in 0..m {
+            prover.commit(&pk, 31u64, Scalar::random(&mut OsRng));
+        }
+        let mut prover_transcript = Transcript::new(b"RangeProof Test");
+        let proof: RangeProof = RangeProof::prove(
+            &mut prover_transcript,
+            &pk,
+            n,
+            &prover,
+        );
+        let mut verifier_transcript = Transcript::new(b"RangeProof Test");
+        let mut verifier = RangeVerifier::new();
+        verifier.allocate(&prover.commitment_vec);
+        b.iter(|| proof.verify(
+            &mut verifier_transcript,
+            &pk,
+            n,
+            &verifier,
+        ));
+    }
+
+    #[bench]
+    fn range_proof_verify_32x2(b: &mut Bencher) {
+        range_proof_verify(b, 32, 2);
+    }
+
+    #[bench]
+    fn range_proof_verify_32x4(b: &mut Bencher) {
+        range_proof_verify(b, 32, 4);
+    }
+
+    #[bench]
+    fn range_proof_verify_32x8(b: &mut Bencher) {
+        range_proof_verify(b, 32, 8);
+    }
+
+    #[bench]
+    fn range_proof_verify_64x2(b: &mut Bencher) {
+        range_proof_verify(b, 64, 2);
+    }
+
+    #[bench]
+    fn range_proof_verify_64x4(b: &mut Bencher) {
+        range_proof_verify(b, 64, 4);
+    }
+
+    #[bench]
+    fn range_proof_verify_64x8(b: &mut Bencher) {
+        range_proof_verify(b, 64, 8);
+    }
+
+
 }

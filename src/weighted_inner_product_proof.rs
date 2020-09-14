@@ -16,7 +16,7 @@ use merlin::Transcript;
 use crate::errors::ProofError;
 use crate::publickey::PublicKey;
 use crate::transcript::TranscriptProtocol;
-use crate::util::weighted_inner_product;
+use crate::util;
 
 /**
  * Wieghted inner product proof
@@ -84,8 +84,8 @@ impl WeightedInnerProductProof {
             let (G1, G2) = G.split_at_mut(n);
             let (H1, H2) = H.split_at_mut(n);
             // compute c_L and c_R
-            let c_L = weighted_inner_product(&a1, &b2, &power_of_y1);
-            let c_R = weighted_inner_product(&a2, &b1, &power_of_y2);
+            let c_L = util::weighted_inner_product(&a1, &b2, &power_of_y1);
+            let c_R = util::weighted_inner_product(&a2, &b1, &power_of_y2);
             // random d_L and d_R by prover
             let d_L: Scalar = Scalar::random(&mut csprng);
             let d_R: Scalar = Scalar::random(&mut csprng);
@@ -204,49 +204,9 @@ impl WeightedInnerProductProof {
         use curve25519_dalek::traits::IsIdentity;
         let logn = self.L_vec.len();
         let n = (1 << logn) as usize;
-        // set transcript weight vector
-        transcript.weighted_inner_product_domain_sep(power_of_y_vec);
-        // get challenge vector
-        let mut challenges = Vec::with_capacity(logn);
-        for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
-            transcript.validate_and_append_point(b"L", L)?;
-            transcript.validate_and_append_point(b"R", R)?;
-            challenges.push(transcript.challenge_scalar(b"e"));
-        }
-        let mut challenges_inv = challenges.clone();
-        let allinv = Scalar::batch_invert(&mut challenges_inv);
-        // compute square of challenges
-        for i in 0..logn {
-            challenges[i] = challenges[i] * challenges[i];
-            challenges_inv[i] = challenges_inv[i] * challenges_inv[i];
-        }
-        let challenges_sqr = challenges;
-        let challenges_inv_sqr = challenges_inv;
-        // compute (c0/c0, c0/c1, c0/c2, ...) for ci = y^{i+1}
-        let mut power_of_y_vec_inv = power_of_y_vec.clone();
-        let _ = Scalar::batch_invert(&mut power_of_y_vec_inv);
-        let power_of_y_vec_inv: Vec<Scalar> = power_of_y_vec_inv
-            .iter()
-            .map(|power_of_y_vec_inv_i| power_of_y_vec_inv_i * power_of_y_vec[0])
-            .collect();
-        // get the last challenge
-        transcript.validate_and_append_point(b"A", &self.A)?;
-        transcript.validate_and_append_point(b"B", &self.B)?;
-        let e = transcript.challenge_scalar(b"e");
+        let (challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e)
+            = self.verification_scalars(n, power_of_y_vec, transcript)?;
         let e_sqr = e * e;
-        // compute s and s' vector
-        let mut s_vec = Vec::with_capacity(n);
-        s_vec.push(allinv);
-        for i in 1..n {
-            let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
-            let k = 1 << log_i;
-            let u_log_i_sq = challenges_sqr[(logn - 1) - log_i];
-            s_vec.push(s_vec[i - k] * u_log_i_sq);
-        }
-        let s_prime_vec: Vec<Scalar> = s_vec.clone().into_iter().rev().collect();
-        for i in 1..n {
-            s_vec[i] *= power_of_y_vec_inv[i];
-        }
         // compute RHS / LHS
         let Ls_exp = challenges_sqr
             .iter()
@@ -299,6 +259,67 @@ impl WeightedInnerProductProof {
         } else {
             Err(ProofError::VerificationError)
         }
+    }
+    //
+    pub fn verification_scalars(
+        &self,
+        n: usize,
+        power_of_y_vec: &Vec<Scalar>,
+        transcript: &mut Transcript,
+    ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar), ProofError> {
+        let logn = self.L_vec.len();
+        if n != (1 << logn) {
+            return Err(ProofError::VerificationError);
+        }
+
+        transcript.weighted_inner_product_domain_sep(power_of_y_vec);
+
+        // 1. Recompute e_1, e_2, ..., e_k based on the proof transcript
+        
+        let mut challenges = Vec::with_capacity(logn);
+        for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
+            transcript.validate_and_append_point(b"L", L)?;
+            transcript.validate_and_append_point(b"R", R)?;
+            challenges.push(transcript.challenge_scalar(b"e"));
+        }
+
+        // 2. Compute 1/(e_1...e_k) and 1/e_k, ..., 1/e_1
+
+        let mut challenges_inv = challenges.clone();
+        let allinv = Scalar::batch_invert(&mut challenges_inv);
+
+        // 3. Compute e_i^2 and (1/e_i)^2
+
+        for i in 0..logn {
+            challenges[i] = challenges[i] * challenges[i];
+            challenges_inv[i] = challenges_inv[i] * challenges_inv[i];
+        }
+        let challenges_sqr = challenges;
+        let challenges_inv_sqr = challenges_inv;
+
+        // 4. Recompute e
+
+        transcript.validate_and_append_point(b"A", &self.A)?;
+        transcript.validate_and_append_point(b"B", &self.B)?;
+        let e = transcript.challenge_scalar(b"e");
+        
+        // 5. Compute s_vec and s_prime_vec
+
+        let y = power_of_y_vec[0];
+        let mut s_vec = Vec::with_capacity(n);
+        s_vec.push(allinv);
+        for i in 1..n {
+            let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
+            let k = 1 << log_i;
+            let u_log_i_sq = challenges_sqr[(logn - 1) - log_i];
+            s_vec.push(s_vec[i - k] * u_log_i_sq);
+        }
+        let s_prime_vec: Vec<Scalar> = s_vec.clone().into_iter().rev().collect();
+        let s_vec = s_vec.iter().zip(util::exp_iter_type2(y.invert()))
+            .map(|(s_vec_i, power_of_y_vec_inv_i)| s_vec_i * power_of_y_vec_inv_i * y)
+            .collect();
+
+        Ok((challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e))
     }
     //
     pub fn size(&self) -> usize {

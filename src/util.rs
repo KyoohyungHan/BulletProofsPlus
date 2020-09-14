@@ -58,6 +58,50 @@ pub fn scalar_exp_vartime(x: &Scalar, mut n: u64) -> Scalar {
     result
 }
 
+pub fn sum_of_powers_type1(x: &Scalar, n: usize) -> Scalar {
+    if !n.is_power_of_two() {
+        return sum_of_powers_slow_type1(x, n);
+    }
+    if n == 0 || n == 1 {
+        return Scalar::from(n as u64);
+    }
+    let mut m = n;
+    let mut result = Scalar::one() + x;
+    let mut factor = *x;
+    while m > 2 {
+        factor = factor * factor;
+        result = result + factor * result;
+        m = m / 2;
+    }
+    result
+}
+
+fn sum_of_powers_slow_type1(x: &Scalar, n: usize) -> Scalar {
+    exp_iter_type1(*x).take(n).sum()
+}
+
+pub fn sum_of_powers_type2(x: &Scalar, n: usize) -> Scalar {
+    if !n.is_power_of_two() {
+        return sum_of_powers_slow_type2(x, n);
+    }
+    if n == 0 || n == 1 {
+        return Scalar::from(n as u64);
+    }
+    let mut m = n;
+    let mut result = x + x * x;
+    let mut factor = *x;
+    while m > 2 {
+        factor = factor * factor;
+        result = result + factor * result;
+        m = m / 2;
+    }
+    result
+}
+
+fn sum_of_powers_slow_type2(x: &Scalar, n: usize) -> Scalar {
+    exp_iter_type2(*x).take(n).sum()
+}
+
 /**
  * Return inner product between a and b
  */
