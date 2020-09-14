@@ -3,8 +3,6 @@
  * https://github.com/dalek-cryptography/bulletproofs
  */
 
-/// Defines a `TranscriptProtocol` trait for using a Merlin transcript.
-
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;

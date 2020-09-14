@@ -22,27 +22,18 @@ impl Iterator for ScalarExp {
     }
 }
 
-/**
- * Return an iterator of the (1, x, x^2, ...)
- */
 #[allow(dead_code)]
 pub fn exp_iter_type1(x: Scalar) -> ScalarExp {
     let next_exp_x = Scalar::one();
     ScalarExp { x, next_exp_x }
 }
 
-/**
- * Return an iterator of the powers of (x, x^2, x^3, ...) 
- */
 #[allow(dead_code)]
 pub fn exp_iter_type2(x: Scalar) -> ScalarExp {
     let next_exp_x = x;
     ScalarExp { x, next_exp_x }
 }
 
-/**
- * Return x^n 
- */
 #[allow(dead_code)]
 pub fn scalar_exp_vartime(x: &Scalar, mut n: u64) -> Scalar {
     let mut result = Scalar::one();
@@ -58,6 +49,7 @@ pub fn scalar_exp_vartime(x: &Scalar, mut n: u64) -> Scalar {
     result
 }
 
+#[allow(dead_code)]
 pub fn sum_of_powers_type1(x: &Scalar, n: usize) -> Scalar {
     if !n.is_power_of_two() {
         return sum_of_powers_slow_type1(x, n);
@@ -76,10 +68,12 @@ pub fn sum_of_powers_type1(x: &Scalar, n: usize) -> Scalar {
     result
 }
 
+#[allow(dead_code)]
 fn sum_of_powers_slow_type1(x: &Scalar, n: usize) -> Scalar {
     exp_iter_type1(*x).take(n).sum()
 }
 
+#[allow(dead_code)]
 pub fn sum_of_powers_type2(x: &Scalar, n: usize) -> Scalar {
     if !n.is_power_of_two() {
         return sum_of_powers_slow_type2(x, n);
@@ -98,13 +92,11 @@ pub fn sum_of_powers_type2(x: &Scalar, n: usize) -> Scalar {
     result
 }
 
+#[allow(dead_code)]
 fn sum_of_powers_slow_type2(x: &Scalar, n: usize) -> Scalar {
     exp_iter_type2(*x).take(n).sum()
 }
 
-/**
- * Return inner product between a and b
- */
 #[allow(dead_code)]
 pub fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
     let mut out = Scalar::zero();
@@ -114,9 +106,6 @@ pub fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
     out
 }
 
-/**
- * Return weighted inner product between a and b with weight c
- */
 #[allow(dead_code)]
 pub fn weighted_inner_product(a: &[Scalar], b: &[Scalar], c: &[Scalar]) -> Scalar {
     let mut out = Scalar::zero();

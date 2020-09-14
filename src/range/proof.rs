@@ -21,6 +21,8 @@ use crate::transcript::TranscriptProtocol;
 use crate::publickey::PublicKey;
 use crate::weighted_inner_product_proof::WeightedInnerProductProof;
 
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
 #[derive(Clone, Debug)]
 pub struct RangeProof {
     pub A: CompressedRistretto,
@@ -448,7 +450,6 @@ impl RangeProof {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test::Bencher;
 
     #[allow(dead_code)]
     fn range_proof(
@@ -489,60 +490,4 @@ mod tests {
         range_proof(64 as usize, 4 as usize);
         range_proof(64 as usize, 8 as usize);
     }
-
-    fn range_proof_verify(b: &mut Bencher, n: usize, m: usize) {
-        let pk = PublicKey::new(n * m);
-        let mut prover = RangeProver::new();
-        for _i in 0..m {
-            prover.commit(&pk, 31u64, Scalar::random(&mut OsRng));
-        }
-        let mut prover_transcript = Transcript::new(b"RangeProof Test");
-        let proof: RangeProof = RangeProof::prove(
-            &mut prover_transcript,
-            &pk,
-            n,
-            &prover,
-        );
-        let mut verifier_transcript = Transcript::new(b"RangeProof Test");
-        let mut verifier = RangeVerifier::new();
-        verifier.allocate(&prover.commitment_vec);
-        b.iter(|| proof.verify(
-            &mut verifier_transcript,
-            &pk,
-            n,
-            &verifier,
-        ));
-    }
-
-    #[bench]
-    fn range_proof_verify_32x2(b: &mut Bencher) {
-        range_proof_verify(b, 32, 2);
-    }
-
-    #[bench]
-    fn range_proof_verify_32x4(b: &mut Bencher) {
-        range_proof_verify(b, 32, 4);
-    }
-
-    #[bench]
-    fn range_proof_verify_32x8(b: &mut Bencher) {
-        range_proof_verify(b, 32, 8);
-    }
-
-    #[bench]
-    fn range_proof_verify_64x2(b: &mut Bencher) {
-        range_proof_verify(b, 64, 2);
-    }
-
-    #[bench]
-    fn range_proof_verify_64x4(b: &mut Bencher) {
-        range_proof_verify(b, 64, 4);
-    }
-
-    #[bench]
-    fn range_proof_verify_64x8(b: &mut Bencher) {
-        range_proof_verify(b, 64, 8);
-    }
-
-
 }
