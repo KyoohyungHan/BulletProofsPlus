@@ -21,8 +21,6 @@ use crate::transcript::TranscriptProtocol;
 use crate::publickey::PublicKey;
 use crate::weighted_inner_product_proof::WeightedInnerProductProof;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
 #[derive(Clone, Debug)]
 pub struct RangeProof {
     pub A: CompressedRistretto,
