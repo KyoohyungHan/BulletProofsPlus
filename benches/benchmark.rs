@@ -10,7 +10,7 @@ use merlin::Transcript;
 use bulletproofsplus::PublicKey;
 use bulletproofsplus::range::{RangeProof, RangeProver, RangeVerifier};
 
-static AGGREGATION_SIZES: [usize; 5] = [2, 4, 8, 16, 32];
+static AGGREGATION_SIZES: [usize; 1] = [256];
 
 fn bsplus_verify_aggregated_rangeproof_helper(n: usize, c: &mut Criterion) {
     let label = format!("Aggregated {}-bit rangeproof verification", n);
@@ -52,10 +52,9 @@ fn bsplus_verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
 
 criterion_group! {
     name = verify_rp;
-    config = Criterion::default();
+    config = Criterion::default().sample_size(50);
     targets =
-    //bsplus_verify_aggregated_rangeproof_n_64,
-    bsplus_verify_aggregated_rangeproof_n_32,
+    bsplus_verify_aggregated_rangeproof_n_64,
 }
 
 criterion_main!(verify_rp);

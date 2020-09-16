@@ -4,10 +4,8 @@ version = "0.1.0"
 authors = ["KyoohyungHan <satanigh89@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-curve25519-dalek = { version = "2", default-features = false, features = ["avx2_backend", "nightly", "serde", "alloc"] }
+curve25519-dalek = { version = "2", default-features = false, features = ["u64_backend", "nightly", "serde", "alloc"] }
 subtle = { version = "2", default-features = false }
 sha3 = { version = "0.8", default-features = false }
 digest = { version = "0.8", default-features = false }
@@ -19,9 +17,12 @@ serde_derive = { version = "1", default-features = false }
 thiserror = { version = "1", optional = true }
 merlin = { version = "2", default-features = false }
 clear_on_drop = { version = "0.2", default-features = false, features = ["nightly"] }
+
+[dev-dependencies]
 hex = "0.3"
-bigint = "4.4.1"
-criterion = "0.3.3"
+criterion = "0.3"
+bincode = "1"
+rand_chacha = "0.2"
 
 [features]
 default = ["std", "avx2_backend"]
