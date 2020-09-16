@@ -358,11 +358,14 @@ impl RangeProof {
         // 2. Compute power of two, power of y, power of z
         
         let power_of_two: Vec<Scalar> = util::exp_iter_type1(Scalar::from(2u64)).take(n).collect();
-        let power_of_y: Vec<Scalar> = util::exp_iter_type2(y).take(mn).collect();
-        let power_of_y_rev: Vec<Scalar> = power_of_y.clone().into_iter().rev().collect();
+        let mut power_of_y: Vec<Scalar> = util::exp_iter_type2(y).take(mn + 1).collect();
+        let power_of_y_mn_plus_1 = match power_of_y.pop() {
+            Some(point) => point,
+            None => panic!("fail to pop"),
+        };
+        let power_of_y_rev = power_of_y.iter().rev();
         let power_of_z: Vec<Scalar> = util::exp_iter_type2(z_sqr).take(m).collect();
-        let power_of_y_mn_plus_1 = util::scalar_exp_vartime(&y, (mn + 1) as u64);
-
+        
         // 3. Compute concat_z_and_2
 
         let concat_z_and_2: Vec<Scalar> = power_of_z
@@ -372,48 +375,48 @@ impl RangeProof {
         
         // 4. Compute scalars for verification
 
-        let (challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e)
+        let (challenges_sqr, challenges_inv_sqr, s_vec, e)
             = self.proof.verification_scalars(mn, &power_of_y, transcript)?;
+        let s_prime_vec = s_vec.iter().rev();
+        let e_inv = e.invert();
         let e_sqr = e * e;
+        let e_sqr_inv = e_sqr.invert();
+        let r_prime_e_inv_y = self.proof.r_prime * e_inv * y;
+        let s_prime_e_inv = self.proof.s_prime * e_inv;
         
         // 5. Compute exponents of G_vec, H_vec, g, and h
 
         let r_prime = self.proof.r_prime;
         let s_prime = self.proof.s_prime;
         let d_prime = self.proof.d_prime;
-        let G_exp: Vec<Scalar> = s_vec.iter()
-            .map(|s_vec_i| minus_z * e_sqr - s_vec_i * r_prime * e)
-            .collect();
-        let H_exp: Vec<Scalar> = s_prime_vec.iter()
+        let G_exp = s_vec.iter()
+            .zip(util::exp_iter_type2(y.invert()))
+            .map(|(s_vec_i, power_of_y_inv_i)| minus_z - s_vec_i * power_of_y_inv_i * r_prime_e_inv_y);
+        let H_exp = s_prime_vec
             .zip(concat_z_and_2.iter())
-            .zip(power_of_y_rev.iter())
-            .map(|((s_prime_vec_i, d_i), power_of_y_rev_i)| - s_prime * e * s_prime_vec_i + (d_i * power_of_y_rev_i + z) * e_sqr)
-            .collect();
+            .zip(power_of_y_rev)
+            .map(|((s_prime_vec_i, d_i), power_of_y_rev_i)| - s_prime_e_inv * s_prime_vec_i + (d_i * power_of_y_rev_i + z));
         let sum_y = util::sum_of_powers_type2(&y, mn);
         let sum_2 = util::sum_of_powers_type1(&Scalar::from(2u64), n);
         let sum_z = util::sum_of_powers_type2(&z_sqr, m);
-        let g_exp = -r_prime * s_prime * y + (sum_y * (z - z_sqr) - power_of_y_mn_plus_1 * z * sum_2 * sum_z) * e_sqr;
-        let h_exp = -d_prime;
+        let g_exp = -r_prime * s_prime * y * e_sqr_inv + (sum_y * (z - z_sqr) - power_of_y_mn_plus_1 * z * sum_2 * sum_z);
+        let h_exp = -d_prime * e_sqr_inv;
         
-        // 6. Compute exponents of L_vec, R_vec, V_vec
+        // 6. Compute exponents of V_vec
 
-        let Ls_exp: Vec<Scalar> = challenges_sqr.iter().map(|e_sqr_i| e_sqr_i * e_sqr).collect();
-        let Rs_exp: Vec<Scalar> = challenges_inv_sqr.iter().map(|e_inv_sqr_i| e_inv_sqr_i * e_sqr).collect();
-        let V_exp: Vec<Scalar> = power_of_z
-            .iter()
-            .map(|power_of_z_i| power_of_z_i * power_of_y_mn_plus_1 * e_sqr)
-            .collect();
+        let V_exp = power_of_z.iter()
+            .map(|power_of_z_i| power_of_z_i * power_of_y_mn_plus_1);
         
         // 7. Compute RHS / LHS
 
         let expected = RistrettoPoint::optional_multiscalar_mul(
-            iter::once(Scalar::one())
-                .chain(iter::once(e))
-                .chain(iter::once(e_sqr))
+            iter::once(e_sqr_inv)
+                .chain(iter::once(e_inv))
+                .chain(iter::once(Scalar::one()))
                 .chain(iter::once(g_exp))
                 .chain(iter::once(h_exp))
-                .chain(Ls_exp)
-                .chain(Rs_exp)
+                .chain(challenges_sqr.iter().cloned())
+                .chain(challenges_inv_sqr.iter().cloned())
                 .chain(G_exp)
                 .chain(H_exp)
                 .chain(V_exp),

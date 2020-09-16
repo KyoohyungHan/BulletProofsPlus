@@ -204,9 +204,13 @@ impl WeightedInnerProductProof {
         use curve25519_dalek::traits::IsIdentity;
         let logn = self.L_vec.len();
         let n = (1 << logn) as usize;
-        let (challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e)
+        let y = power_of_y_vec[0];
+        let (challenges_sqr, challenges_inv_sqr, s_vec, e)
             = self.verification_scalars(n, power_of_y_vec, transcript)?;
+        let s_prime_vec = s_vec.iter().rev();
         let e_sqr = e * e;
+        let r_prime_e_y = self.r_prime * e * y;
+        let s_prime_e = self.s_prime * e;
         // compute RHS / LHS
         let Ls_exp = challenges_sqr
             .iter()
@@ -217,15 +221,16 @@ impl WeightedInnerProductProof {
         let G_exp = s_vec
             .iter()
             .zip(G_exp_of_commitment.iter())
-            .map(|(s_vec_i, g_exp_of_comm_i)| {
-                -s_vec_i * self.r_prime * e + g_exp_of_comm_i * e_sqr
+            .zip(util::exp_iter_type2(y.invert()))
+            .map(|((s_vec_i, g_exp_of_comm_i), power_of_y_vec_inv_i)| {
+                -s_vec_i * power_of_y_vec_inv_i * r_prime_e_y + g_exp_of_comm_i * e_sqr
             });
-        let H_exp = s_prime_vec.iter().zip(H_exp_of_commitment.iter()).map(
+        let H_exp = s_prime_vec.zip(H_exp_of_commitment.iter()).map(
             |(s_prime_vec_i, h_exp_of_comm_i)| {
-                -s_prime_vec_i * self.s_prime * e + h_exp_of_comm_i * e_sqr
+                -s_prime_vec_i * s_prime_e + h_exp_of_comm_i * e_sqr
             },
         );
-        let g_exp = -self.r_prime * power_of_y_vec[0] * self.s_prime + *g_exp_of_commitment * e_sqr;
+        let g_exp = -self.r_prime * y * self.s_prime + *g_exp_of_commitment * e_sqr;
         let h_exp = -self.d_prime;
         let V_exp = V_exp_of_commitment
             .iter()
@@ -266,7 +271,7 @@ impl WeightedInnerProductProof {
         n: usize,
         power_of_y_vec: &Vec<Scalar>,
         transcript: &mut Transcript,
-    ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar), ProofError> {
+    ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar), ProofError> {
         let logn = self.L_vec.len();
         if n != (1 << logn) {
             return Err(ProofError::VerificationError);
@@ -305,7 +310,6 @@ impl WeightedInnerProductProof {
         
         // 5. Compute s_vec and s_prime_vec
 
-        let y = power_of_y_vec[0];
         let mut s_vec = Vec::with_capacity(n);
         s_vec.push(allinv);
         for i in 1..n {
@@ -314,12 +318,12 @@ impl WeightedInnerProductProof {
             let u_log_i_sq = challenges_sqr[(logn - 1) - log_i];
             s_vec.push(s_vec[i - k] * u_log_i_sq);
         }
-        let s_prime_vec: Vec<Scalar> = s_vec.clone().into_iter().rev().collect();
-        let s_vec = s_vec.iter().zip(util::exp_iter_type2(y.invert()))
-            .map(|(s_vec_i, power_of_y_vec_inv_i)| s_vec_i * power_of_y_vec_inv_i * y)
-            .collect();
+        // let s_prime_vec: Vec<Scalar> = s_vec.clone().into_iter().rev().collect();
+        // let s_vec = s_vec.iter().zip(util::exp_iter_type2(y.invert()))
+        //     .map(|(s_vec_i, power_of_y_vec_inv_i)| s_vec_i * power_of_y_vec_inv_i * y)
+        //     .collect();
 
-        Ok((challenges_sqr, challenges_inv_sqr, s_vec, s_prime_vec, e))
+        Ok((challenges_sqr, challenges_inv_sqr, s_vec, e))
     }
     //
     pub fn size(&self) -> usize {
