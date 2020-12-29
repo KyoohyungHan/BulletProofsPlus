@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
-
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::CompressedRistretto;
 
 use crate::publickey::PublicKey;
 
@@ -11,7 +10,7 @@ use crate::publickey::PublicKey;
 pub struct RangeProver {
     pub(crate) v_vec: Vec<u64>,
     pub(crate) gamma_vec: Vec<Scalar>,
-    pub commitment_vec: Vec<RistrettoPoint>,
+    pub commitment_vec: Vec<CompressedRistretto>,
 }
 
 impl RangeProver {
@@ -32,6 +31,6 @@ impl RangeProver {
     ) {
         self.v_vec.push(v);
         self.gamma_vec.push(gamma);
-        self.commitment_vec.push(pk.commitment(&Scalar::from(v), &gamma));
+        self.commitment_vec.push(pk.commitment(&Scalar::from(v), &gamma).compress());
     }
 }

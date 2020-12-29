@@ -1,9 +1,8 @@
 #![allow(non_snake_case)]
-
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 
 pub struct RangeVerifier {
-    pub commitment_vec: Vec<RistrettoPoint>,
+    pub commitment_vec: Vec<CompressedRistretto>,
 }
 
 impl RangeVerifier {
@@ -16,8 +15,9 @@ impl RangeVerifier {
     //
     pub fn allocate(
         &mut self,
-        commitment: &Vec<RistrettoPoint>,
+        commitment: &Vec<CompressedRistretto>,
     ) {
         self.commitment_vec = commitment.clone();
+        // self.commitment_vec = commitment.clone().iter().map(|V| V.compress()).collect();
     }
 }

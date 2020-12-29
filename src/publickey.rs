@@ -6,9 +6,9 @@ use core::iter;
 use alloc::vec::Vec;
 use rand_core::OsRng;
 
-use curve25519_dalek::ristretto::{RistrettoPoint, VartimeRistrettoPrecomputation};
+use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::VartimePrecomputedMultiscalarMul;
+use curve25519_dalek::traits::MultiscalarMul;
 
 /**
  * Publickey 
@@ -18,8 +18,6 @@ pub struct PublicKey {
     pub h: RistrettoPoint,
     pub G_vec: Vec<RistrettoPoint>,
     pub H_vec: Vec<RistrettoPoint>,
-    pub precomputed_table1: VartimeRistrettoPrecomputation,
-    pub precomputed_table2: VartimeRistrettoPrecomputation,
 }
 
 impl PublicKey {
@@ -34,30 +32,16 @@ impl PublicKey {
         let H_vec: Vec<RistrettoPoint> = (0..length)
             .map(|_| RistrettoPoint::random(&mut csprng))
             .collect();
-        // pre-compute for a * g + b * h computation
-        let precomputed_table1 = VartimeRistrettoPrecomputation::new(
-            iter::once(&g)
-            .chain(iter::once(&h))
-        );
-        // pre-compute for Sum a_i G_i + Sum b_i H_i + x * g + y * h
-        let precomputed_table2 = VartimeRistrettoPrecomputation::new(
-            G_vec.iter().cloned()
-            .chain(H_vec.iter().cloned())
-            .chain(iter::once(g))
-            .chain(iter::once(h))
-        );
         PublicKey {
             g: g,
             h: h,
             G_vec: G_vec,
             H_vec: H_vec,
-            precomputed_table1: precomputed_table1,
-            precomputed_table2: precomputed_table2,
         }
     }
     //
     pub fn commitment(&self, v: &Scalar, gamma: &Scalar) -> RistrettoPoint {
-        self.precomputed_table1.vartime_multiscalar_mul(&[*v, *gamma])
+        RistrettoPoint::multiscalar_mul(&[*v, *gamma], &[self.g, self.h])
     }
     //
     pub fn vector_commitment(
@@ -72,6 +56,10 @@ impl PublicKey {
             .chain(b_vec.iter())
             .chain(iter::once(out))
             .chain(iter::once(gamma));
-        self.precomputed_table2.vartime_multiscalar_mul(scalars)
+        let points = self.G_vec.iter()
+            .chain(self.H_vec.iter())
+            .chain(iter::once(&self.g))
+            .chain(iter::once(&self.h));
+            RistrettoPoint::multiscalar_mul(scalars, points)
     }
 }

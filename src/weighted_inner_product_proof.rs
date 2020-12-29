@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 extern crate alloc;
-extern crate hex;
 
 use alloc::vec::Vec;
 use core::iter;
@@ -13,10 +12,10 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::VartimeMultiscalarMul;
 use merlin::Transcript;
 
+use crate::util;
 use crate::errors::ProofError;
 use crate::publickey::PublicKey;
 use crate::transcript::TranscriptProtocol;
-use crate::util;
 
 /**
  * Wieghted inner product proof
